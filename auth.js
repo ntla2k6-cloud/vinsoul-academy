@@ -1,10 +1,8 @@
 // ═══════════════════════════════════════════════════
-//  auth.js – Vinsoul Academy (đặt trong public/)
-//  Load TRƯỚC app.js trong index.html
+//  auth.js v2 – Vinsoul Academy
+//  Hỗ trợ 4 cấp quyền: admin / staff / teacher / student
 // ═══════════════════════════════════════════════════
 
-// ── Tự động gắn token vào MỌI fetch gọi /api/ ──
-// Làm điều này TRƯỚC KHI app.js chạy để mọi save/load đều có token
 const _originalFetch = window.fetch.bind(window);
 window.fetch = function(url, opts = {}) {
   if (typeof url === 'string' && url.startsWith('/api/')) {
@@ -14,7 +12,6 @@ window.fetch = function(url, opts = {}) {
     }
   }
   return _originalFetch(url, opts).then(res => {
-    // Nếu bất kỳ API nào trả về 401 thì tự logout
     if (res.status === 401 && typeof url === 'string' && url.startsWith('/api/') && !url.includes('/auth/')) {
       VS_AUTH.logout();
     }
@@ -22,38 +19,40 @@ window.fetch = function(url, opts = {}) {
   });
 };
 
+// Lưu role hiện tại để app.js dùng
+window.VS_ROLE = null;
+
 const VS_AUTH = {
 
-  // Đăng xuất
   logout: () => {
     localStorage.removeItem('vs_token');
+    window.VS_ROLE = null;
     location.reload();
   },
 
-  // Kiểm tra token khi load trang
   check: async () => {
     const token = localStorage.getItem('vs_token');
-    if (!token) {
-      VS_AUTH.showLoginForm();
-      return;
-    }
+    if (!token) { VS_AUTH.showLoginForm(); return; }
     try {
-      const r = await _originalFetch('/api/auth/me', {
-        headers: { 'Authorization': token }
-      });
+      const r = await _originalFetch('/api/auth/me', { headers: { 'Authorization': token } });
       if (!r.ok) throw new Error();
       const user = await r.json();
+      window.VS_ROLE = user.role;
+      window.VS_USER = user;
 
-      // Token hợp lệ, hiện app
+      // Cập nhật sidebar tên & role
       const nameEl = document.getElementById('sidebar-user-name');
       const roleEl = document.getElementById('sidebar-user-role');
+      const roleMap = { admin:'Quản Trị Viên', staff:'Nhân Viên', teacher:'Giáo Viên', student:'Học Viên' };
       if (nameEl) nameEl.textContent = user.displayName || user.username;
-      if (roleEl) roleEl.textContent = user.role === 'admin' ? 'Quản Trị Viên' : 'Nhân Viên';
+      if (roleEl) roleEl.textContent = roleMap[user.role] || user.role;
+
+      // Áp dụng RBAC vào sidebar
+      VS_AUTH.applyRBAC(user.role);
 
       const appEl = document.getElementById('vs-app');
       if (appEl) appEl.style.display = 'block';
 
-      // Gọi init của app.js nếu có
       if (typeof window.initAppAfterLogin === 'function') {
         window.initAppAfterLogin();
       }
@@ -63,13 +62,48 @@ const VS_AUTH = {
     }
   },
 
-  // Hiển thị form đăng nhập
+  // ── Kiểm soát hiển thị Sidebar theo role ──
+  applyRBAC: (role) => {
+    // Tất cả nav sections
+    const allSections = document.querySelectorAll('.nav-section');
+
+    if (role === 'student') {
+      // Student: chỉ hiện Về Chúng Tôi, Học Phí, Thông Tin Cá Nhân
+      allSections.forEach(s => s.style.display = 'none');
+      const allowed = ['nav-sec-about', 'nav-sec-tuition', 'nav-sec-profile'];
+      allowed.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = '';
+      });
+      return;
+    }
+
+    if (role === 'teacher') {
+      // Teacher: ẩn Tài Chính, Quản Trị Tài Khoản, ẩn nút xóa học viên khác lớp
+      const hidden = ['nav-sec-revenue', 'nav-sec-accounts', 'nav-sec-leads'];
+      hidden.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+      return;
+    }
+
+    if (role === 'staff') {
+      // Staff: ẩn Quản Trị Tài Khoản
+      const el = document.getElementById('nav-sec-accounts');
+      if (el) el.style.display = 'none';
+      return;
+    }
+
+    // Admin: hiển thị tất cả
+    const accEl = document.getElementById('nav-sec-accounts');
+    if (accEl) accEl.style.display = '';
+  },
+
   showLoginForm: () => {
-    // Ẩn app
     const appEl = document.getElementById('vs-app');
     if (appEl) appEl.style.display = 'none';
 
-    // Xóa form cũ nếu có
     const old = document.getElementById('vs-login-overlay');
     if (old) old.remove();
 
@@ -88,9 +122,7 @@ const VS_AUTH = {
           width:100%;max-width:380px;
           box-shadow:0 20px 60px rgba(0,0,0,0.4);
         }
-        .vsl-logo {
-          text-align:center;margin-bottom:28px;
-        }
+        .vsl-logo { text-align:center;margin-bottom:28px; }
         .vsl-logo-badge {
           display:inline-flex;align-items:center;justify-content:center;
           width:52px;height:52px;border-radius:14px;
@@ -105,7 +137,7 @@ const VS_AUTH = {
           width:100%;border:1.5px solid #e0e0e0;border-radius:10px;
           padding:11px 14px;font-size:14px;font-family:'Be Vietnam Pro',sans-serif;
           outline:none;transition:border-color .2s;margin-bottom:16px;
-          color:#1a1a1a;background:#fff;
+          color:#1a1a1a;background:#fff;box-sizing:border-box;
         }
         .vsl-input:focus { border-color:#F69922; }
         .vsl-btn {
@@ -154,20 +186,10 @@ const VS_AUTH = {
       </div>
     `;
     document.body.appendChild(overlay);
-
-    // Focus vào ô username
-    setTimeout(() => {
-      const el = document.getElementById('vsl-u');
-      if (el) el.focus();
-    }, 50);
-
-    // Enter để submit
-    overlay.addEventListener('keydown', e => {
-      if (e.key === 'Enter') VS_AUTH._doLogin();
-    });
+    setTimeout(() => { const el = document.getElementById('vsl-u'); if (el) el.focus(); }, 50);
+    overlay.addEventListener('keydown', e => { if (e.key === 'Enter') VS_AUTH._doLogin(); });
   },
 
-  // Xử lý đăng nhập
   _doLogin: async () => {
     const u      = (document.getElementById('vsl-u')?.value || '').trim();
     const p      = document.getElementById('vsl-p')?.value || '';
@@ -175,12 +197,10 @@ const VS_AUTH = {
     const btn    = document.getElementById('vsl-btn');
 
     if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
-
     if (!u || !p) {
       if (errEl) { errEl.textContent = 'Vui lòng nhập tên đăng nhập và mật khẩu'; errEl.style.display = 'block'; }
       return;
     }
-
     if (btn) { btn.disabled = true; btn.textContent = 'Đang xác thực...'; }
 
     try {
@@ -190,17 +210,13 @@ const VS_AUTH = {
         body: JSON.stringify({ username: u, password: p })
       });
       const data = await res.json();
-
       if (!res.ok) {
         if (errEl) { errEl.textContent = data.error || 'Đăng nhập thất bại'; errEl.style.display = 'block'; }
         if (btn) { btn.disabled = false; btn.textContent = 'ĐĂNG NHẬP'; }
         return;
       }
-
-      // Lưu token và reload
       localStorage.setItem('vs_token', data.token);
       location.reload();
-
     } catch {
       if (errEl) { errEl.textContent = 'Lỗi kết nối đến server'; errEl.style.display = 'block'; }
       if (btn) { btn.disabled = false; btn.textContent = 'ĐĂNG NHẬP'; }
@@ -208,7 +224,6 @@ const VS_AUTH = {
   }
 };
 
-// ── Chạy khi DOM sẵn sàng ──
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', VS_AUTH.check);
 } else {
