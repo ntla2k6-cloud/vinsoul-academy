@@ -1,0 +1,23 @@
+[
+  {
+    "id": 1,
+    "username": "admin",
+    "passwordHash": "$2b$10$fmD.TmdivIo/SYt6h9haauvK.EyHD0PUbJ0MEb/2yMHnTDzzw8ueS",
+    "displayName": "Quan Tri Vien",
+    "role": "admin"
+  },
+  {
+    "id": 1777364428100,
+    "username": "myduyen_gv",
+    "passwordHash": "$2b$10$jY0bc9Tas44CeMDAXUdlluwFh5pCTQwjlfNsp9b8Jpu.bJ5bJVVU.",
+    "displayName": "Nguyễn Thị Mỹ Duyên",
+    "role": "staff"
+  },
+  {
+    "id": 1778388259003,
+    "username": "hongngoc_gv",
+    "passwordHash": "$2b$10$Y3nkKKnprTD3VIj2yQSXsunfVGxrbzg2kq17HRXB/KIFwfFXG1i/y",
+    "displayName": "Nguyễn Thị Hồng Ngọc",
+    "role": "staff"
+  }
+]
