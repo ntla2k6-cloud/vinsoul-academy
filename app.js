@@ -1967,23 +1967,48 @@ async function submitChangePassword() {
   }
 }
 
-window.initAppAfterLogin = async function() {
+window.initAppAfterLogin = async function(user) {
   try {
-    const r    = await fetch('/api/load');
-    if (!r.ok) throw new Error('Lỗi tải dữ liệu: ' + r.status);
+    const r = await fetch('/api/load');
     const data = await r.json();
-    if (data.students)      students      = data.students;
-    if (data.staff)         staff         = data.staff;
-    if (data.leads)         leads         = data.leads;
-    if (data.classes)       classes       = data.classes;
-    if (data.attendance)    attendance    = data.attendance;
-    if (data.makeups)       makeups       = data.makeups;
-    if (data.templates)     templates     = data.templates;
-    if (data.customCourses) customCourses = data.customCourses;
-    if (data.customPrices)  customPrices  = data.customPrices;
+    students = data.students||[]; staff = data.staff||[]; leads = data.leads||[];
+    classes = data.classes||[]; attendance = data.attendance||[]; makeups = data.makeups||[];
+    
     renderDashboard();
-    renderCoursesPage();
-    seedTemplatesIfEmpty();
+  } catch(e) { console.error('Lỗi load dữ liệu:', e); }
+};
+
+// ================= CODE TÍCH HỢP XUẤT EXCEL & QR =================
+// 1. TẠO MÃ VIETQR
+function generateVietQR(amount, studentName) {
+    const content = `VS_${studentName.replace(/\s+/g, '')}`;
+    const qrUrl = `https://img.vietqr.io/image/970436-1731238888-print.png?amount=${amount}&addInfo=${content}&accountName=HKD%20VINSOUL`;
+    
+    document.getElementById('vietqr-img').src = qrUrl;
+    document.getElementById('qr-desc').textContent = content;
+    document.getElementById('qr-amount').textContent = Number(amount).toLocaleString('vi-VN') + ' VNĐ';
+    document.getElementById('vietqr-modal').classList.add('open');
+}
+
+// 2. XUẤT EXCEL (Dùng SheetJS thư viện ngoài, chuẩn định dạng)
+function exportExcel(type) {
+    const wb = XLSX.utils.book_new();
+    let ws_data = [];
+
+    if (type === 'students') {
+        ws_data.push(["Họ Tên", "SĐT", "Khóa Học", "Trạng Thái", "Học Phí"]);
+        students.forEach(s => ws_data.push([s.name, s.phone, s.subject, s.payment, s.amount]));
+    } else if (type === 'revenue') {
+        ws_data.push(["Họ Tên", "Khóa Học", "Số Tiền", "Ngày Nộp", "Hình Thức"]);
+        const paid = students.filter(s => s.payment !== 'Chưa Thanh Toán' && s.amount);
+        paid.forEach(s => ws_data.push([s.name, s.subject, s.amount, s.paydate, s.payment]));
+    }
+    
+    const ws = XLSX.utils.aoa_to_sheet(ws_data);
+    XLSX.utils.book_append_sheet(wb, ws, "Data");
+    XLSX.writeFile(wb, `Vinsoul_${type}_${new Date().getTime()}.xlsx`);
+    showToast("Đã tải file Excel xuống máy tính!");
+}
 
     // Hien menu Quan Tri Tai Khoan neu la admin
     try {
